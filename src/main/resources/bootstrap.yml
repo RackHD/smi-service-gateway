@@ -1,0 +1,24 @@
+server:
+    port: 46020
+
+gateway: 
+   host: localhost
+
+spring:
+  profiles: default
+  application:
+    name: gateway-zuul
+  cloud:
+    consul:
+      #discovery:
+        #prefer-ip-address: true
+      enabled: true
+      host: service-registry
+      port: 8500
+      config:
+        prefix: config
+        profileSeparator: '::'
+        format: YAML
+        data-key: data
+        fail-fast: true
+
