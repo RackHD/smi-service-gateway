@@ -7,11 +7,11 @@ gateway:
 spring:
   profiles: default
   application:
-    name: gateway-zuul
+    name: gateway
   cloud:
     consul:
-      #discovery:
-        #prefer-ip-address: true
+      discovery:
+        preferIpAddress: true
       enabled: true
       host: service-registry
       port: 8500
