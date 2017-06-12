@@ -79,6 +79,7 @@ repositories {
 	maven {
 		url "${artifactory_contextUrl}/libs-release"
 	}
+	maven { url "${artifactory_contextUrl}/libs-snapshot" }
 }
 
 
@@ -94,6 +95,11 @@ dependencies {
     compile "org.springframework.boot:spring-boot-starter-actuator"
     compile 'org.springframework.cloud:spring-cloud-starter-consul-all'
     compile 'org.springframework.cloud:spring-cloud-starter-zuul'
+    compile 'org.springframework.cloud:spring-cloud-starter-ribbon'
+	compile 'org.springframework.cloud:spring-cloud-starter-feign'
+    compile 'com.dell.isg.smi:commons-elm:1.0-SNAPSHOT'
+    compile 'com.dell.isg.smi:commons-utilities:1.0-SNAPSHOT'
+    compile 'com.dell.isg.smi:commons-model:1.0-SNAPSHOT'
 }
 
 license {
