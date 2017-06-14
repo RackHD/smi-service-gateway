@@ -51,13 +51,11 @@ public class SplitDiscoveryManagerImpl implements ISplitDiscoveryManager {
 				});
 			}
 			List<Future<List<DiscoverdDeviceResponse>>> futures = executorService.invokeAll(callables);
-
 			for (Future<List<DiscoverdDeviceResponse>> future : futures) {
 				aggregateResponses(responseList, future.get());
 			}
 			executorService.shutdown();
-		}
-
+		} 
 		return responseList;
 	}
 
@@ -95,11 +93,10 @@ public class SplitDiscoveryManagerImpl implements ISplitDiscoveryManager {
 					aggregateDeviceTypes.setDiscovered(aggregateDeviceTypes.getDiscoveredDeviceInfoList().size());
 					aggregateDiscoverdDevice.getDiscoveredDeviceList().set(indexType, aggregateDeviceTypes);
 				}
-				gatewayResponse.set(indexGroup,aggregateDiscoverdDevice);
+				gatewayResponse.set(indexGroup, aggregateDiscoverdDevice);
 			}
 
 		}
 
 	}
-
 }
