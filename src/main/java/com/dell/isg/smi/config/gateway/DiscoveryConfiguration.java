@@ -26,7 +26,7 @@ import feign.Request;
 public class DiscoveryConfiguration {
 	
 	private String name = "discoveryConfiguration";
-
+	
 	@Bean
 	@Scope("prototype")
 	public Feign.Builder feignBuilder() {

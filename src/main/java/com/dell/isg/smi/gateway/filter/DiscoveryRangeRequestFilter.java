@@ -22,14 +22,13 @@ public class DiscoveryRangeRequestFilter extends ZuulFilter {
 
 	private String URI = "api/1.0/discover/range";
 	private String REDIRECT_PATH = "/api/1.0/gateway/discover/range/split";
-	private String REDIRECT_URI = "http://%s:%s";
 
 	public String filterType() {
-		return "route";
+		return "pre";
 	}
 
 	public int filterOrder() {
-		return 0;
+		return 99;
 	}
 
 	public boolean shouldFilter() {
@@ -47,7 +46,6 @@ public class DiscoveryRangeRequestFilter extends ZuulFilter {
 					DiscoverIPRangeDeviceRequests.class);
 			if (doRangeSplit(discoverIPRangeDeviceRequests.getDiscoverIpRangeDeviceRequests())) {
 				String url = ServletUriComponentsBuilder.fromCurrentRequest().replacePath(REDIRECT_PATH).build().toUriString();
-				System.out.println("Redirect URL :" + url);
 				context.setRouteHost(new URL(url));
 				context.set("requestURI", "");
 			}
@@ -80,4 +78,5 @@ public class DiscoveryRangeRequestFilter extends ZuulFilter {
 		}
 		return isValid;
 	}
+	
 }

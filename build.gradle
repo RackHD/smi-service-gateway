@@ -24,8 +24,8 @@ group = 'com.dell.isg.smi'
 buildscript {
 	ext {
 		springVersion = '4.3.6.RELEASE'
-    	springBootVersion = '1.5.1.RELEASE'
-    	springCloudVersion = 'Camden.SR5'
+    	springBootVersion = '1.5.3.RELEASE'
+    	springCloudVersion = 'Dalston.SR1'
 	}
    repositories {
     mavenLocal()
@@ -97,12 +97,7 @@ dependencies {
     compile 'org.springframework.cloud:spring-cloud-starter-zuul'
     compile 'org.springframework.cloud:spring-cloud-starter-ribbon'
 	compile 'org.springframework.cloud:spring-cloud-starter-feign'
-    compile 'com.dell.isg.smi:commons-elm:1.0-SNAPSHOT'
-    compile 'com.dell.isg.smi:commons-utilities:1.0-SNAPSHOT'
     compile 'com.dell.isg.smi:commons-model:1.0-SNAPSHOT'
-    compile group: 'org.apache.commons', name: 'commons-collections4', version: '+'
-//	compile group: 'org.apache.commons', name: 'commons-lang3', version: '+'
-//	compile group: 'commons-beanutils', name: 'commons-beanutils', version: '+'
 }
 
 license {

@@ -9,8 +9,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.collections4.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +18,7 @@ import com.dell.isg.smi.commons.model.device.discovery.DiscoverDeviceRequest;
 import com.dell.isg.smi.commons.model.device.discovery.DiscoverIPRangeDeviceRequests;
 import com.dell.isg.smi.commons.model.device.discovery.DiscoverdDeviceResponse;
 import com.dell.isg.smi.commons.model.device.discovery.DiscoveredDeviceTypes;
+import com.dell.isg.smi.commons.model.device.discovery.DiscoveryDeviceGroupEnum;
 import com.dell.isg.smi.gateway.client.DeviceDiscoveryClient;
 
 @Component
@@ -34,7 +33,7 @@ public class SplitDiscoveryManagerImpl implements ISplitDiscoveryManager {
 	public List<DiscoverdDeviceResponse> process(DiscoverIPRangeDeviceRequests discoverIPRangeDeviceRequests)
 			throws Exception {
 		Set<DiscoverDeviceRequest> ranges = discoverIPRangeDeviceRequests.getDiscoverIpRangeDeviceRequests();
-		List<DiscoverdDeviceResponse> responseList = new ArrayList<DiscoverdDeviceResponse>();
+		List<DiscoverdDeviceResponse> responseList = initializeResponseList();
 
 		if (ranges.size() >= 1) {
 			ExecutorService executorService = Executors.newFixedThreadPool(ranges.size());
@@ -45,21 +44,11 @@ public class SplitDiscoveryManagerImpl implements ISplitDiscoveryManager {
 				Set<DiscoverDeviceRequest> newRanges = new HashSet<DiscoverDeviceRequest>();
 				newRanges.add(discoverDeviceRequest);
 				newDiscoverIPRangeDeviceRequests.setDiscoverIpRangeDeviceRequests(newRanges);
-				// Future<List<DiscoverdDeviceResponse>> future =
-				// executorService.submit(new
-				// Callable<List<DiscoverdDeviceResponse>>(){
-				// public List<DiscoverdDeviceResponse> call() throws Exception
-				// {
-				// return
-				// discoveryClient.discover(newDiscoverIPRangeDeviceRequests);
-				// }
-				// });
 				callables.add(new Callable<List<DiscoverdDeviceResponse>>() {
 					public List<DiscoverdDeviceResponse> call() throws Exception {
 						return discoveryClient.discover(newDiscoverIPRangeDeviceRequests);
 					}
 				});
-				// aggregateResponses(responseList, future.get());
 			}
 			List<Future<List<DiscoverdDeviceResponse>>> futures = executorService.invokeAll(callables);
 
@@ -72,59 +61,45 @@ public class SplitDiscoveryManagerImpl implements ISplitDiscoveryManager {
 		return responseList;
 	}
 
-	@SuppressWarnings("deprecation")
-	private void aggregateResponses(List<DiscoverdDeviceResponse> responseList,
-			List<DiscoverdDeviceResponse> response) {
+	private List<DiscoverdDeviceResponse> initializeResponseList() {
+		List<DiscoverdDeviceResponse> responseList = new ArrayList<DiscoverdDeviceResponse>();
+		for (DiscoveryDeviceGroupEnum enumGroupName : DiscoveryDeviceGroupEnum.values()) {
+			DiscoverdDeviceResponse discoverdDeviceResponse = new DiscoverdDeviceResponse();
+			discoverdDeviceResponse.setDeviceGroup(enumGroupName.value());
+			discoverdDeviceResponse.setDiscoveredDeviceTypesList(new ArrayList<DiscoveredDeviceTypes>());
+			responseList.add(discoverdDeviceResponse);
+		}
+		return responseList;
+	}
 
-		for (DiscoverdDeviceResponse discoverdDeviceResponse : response) {
-			DiscoverdDeviceResponse aggregateDiscoverdDeviceResponse = CollectionUtils.find(responseList,
-					predicateDiscoverdDeviceResponse(discoverdDeviceResponse.getDeviceGroup()));
-			if (aggregateDiscoverdDeviceResponse == null) {
-				responseList.add(discoverdDeviceResponse);
-			} else {
-				List<DiscoveredDeviceTypes> discoveredDeviceTypes = discoverdDeviceResponse.getDiscoveredDeviceList();
-				for (DiscoveredDeviceTypes discoveredDeviceType : discoveredDeviceTypes) {
-					DiscoveredDeviceTypes aggregateDiscoveredDeviceTypes = CollectionUtils.find(
-							aggregateDiscoverdDeviceResponse.getDiscoveredDeviceList(),
-							predicateDiscoveredDeviceTypes(discoveredDeviceType.getDeviceName()));
-					if (aggregateDiscoveredDeviceTypes == null) {
-						aggregateDiscoverdDeviceResponse.getDiscoveredDeviceList().add(discoveredDeviceType);
-					} else {
-						aggregateDiscoveredDeviceTypes.getDiscoveredDeviceInfoList()
-								.addAll(discoveredDeviceType.getDiscoveredDeviceInfoList());
-						aggregateDiscoveredDeviceTypes
-								.setDiscovered(aggregateDiscoveredDeviceTypes.getDiscoveredDeviceInfoList().size());
-						aggregateDiscoverdDeviceResponse.getDiscoveredDeviceList().add(aggregateDiscoveredDeviceTypes);
-					}
-					responseList.add(aggregateDiscoverdDeviceResponse);
+	private void aggregateResponses(List<DiscoverdDeviceResponse> gatewayResponse,
+			List<DiscoverdDeviceResponse> serviceResponse) {
+		for (DiscoverdDeviceResponse discoverdDevice : serviceResponse) {
+			DiscoverdDeviceResponse aggregateDiscoverdDevice = gatewayResponse.stream()
+					.filter(s -> s.getDeviceGroup().equals(discoverdDevice.getDeviceGroup())).findFirst().get();
+			int indexGroup = gatewayResponse.indexOf(aggregateDiscoverdDevice);
+			List<DiscoveredDeviceTypes> discoveredDeviceTypes = discoverdDevice.getDiscoveredDeviceList();
+			for (DiscoveredDeviceTypes deviceType : discoveredDeviceTypes) {
+				DiscoveredDeviceTypes aggregateDeviceTypes = null;
+				try {
+					aggregateDeviceTypes = aggregateDiscoverdDevice.getDiscoveredDeviceList().stream()
+							.filter(s -> s.getDeviceName().equals(deviceType.getDeviceName())).findFirst().get();
+				} catch (Exception e) {
+					logger.debug("No device type list in aggregation response. hence constructing new one.");
 				}
+				if (aggregateDeviceTypes == null) {
+					aggregateDiscoverdDevice.getDiscoveredDeviceList().add(deviceType);
+				} else {
+					int indexType = aggregateDiscoverdDevice.getDiscoveredDeviceList().indexOf(aggregateDeviceTypes);
+					aggregateDeviceTypes.getDiscoveredDeviceInfoList().addAll(deviceType.getDiscoveredDeviceInfoList());
+					aggregateDeviceTypes.setDiscovered(aggregateDeviceTypes.getDiscoveredDeviceInfoList().size());
+					aggregateDiscoverdDevice.getDiscoveredDeviceList().set(indexType, aggregateDeviceTypes);
+				}
+				gatewayResponse.set(indexGroup,aggregateDiscoverdDevice);
 			}
+
 		}
 
-	}
-
-	private Predicate<DiscoverdDeviceResponse> predicateDiscoverdDeviceResponse(String groupName) {
-		return new Predicate<DiscoverdDeviceResponse>() {
-			@Override
-			public boolean evaluate(DiscoverdDeviceResponse discoverdDeviceResponse) {
-				if (discoverdDeviceResponse == null) {
-					return false;
-				}
-				return discoverdDeviceResponse.getDeviceGroup().equals(groupName);
-			}
-		};
-	}
-
-	private Predicate<DiscoveredDeviceTypes> predicateDiscoveredDeviceTypes(String deviceName) {
-		return new Predicate<DiscoveredDeviceTypes>() {
-			@Override
-			public boolean evaluate(DiscoveredDeviceTypes discoveredDeviceTypes) {
-				if (discoveredDeviceTypes == null) {
-					return false;
-				}
-				return discoveredDeviceTypes.getDeviceName().equals(deviceName);
-			}
-		};
 	}
 
 }

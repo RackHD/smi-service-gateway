@@ -4,10 +4,8 @@
 package com.dell.isg.smi.gateway;
 
 import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
-import org.springframework.cloud.context.config.annotation.RefreshScope;
+import org.springframework.boot.web.support.SpringBootServletInitializer;
+import org.springframework.cloud.client.SpringCloudApplication;
 import org.springframework.cloud.netflix.feign.EnableFeignClients;
 import org.springframework.cloud.netflix.ribbon.RibbonClient;
 import org.springframework.cloud.netflix.ribbon.RibbonClients;
@@ -23,14 +21,11 @@ import com.dell.isg.smi.service.config.InnerConfig;
     @RibbonClient(name = "discoveryConfiguration", configuration = DiscoveryConfiguration.class)
 })
 
+@SpringCloudApplication
 @EnableZuulProxy
-@SpringBootApplication
-@EnableDiscoveryClient
 @EnableFeignClients("com.dell.isg.smi.gateway")
-@EnableAutoConfiguration
 @Import(InnerConfig.class)
-@RefreshScope
-public class Application {
+public class Application extends SpringBootServletInitializer{
 
     public static void main(String[] args) {
         SpringApplication.run(Application.class, args);
