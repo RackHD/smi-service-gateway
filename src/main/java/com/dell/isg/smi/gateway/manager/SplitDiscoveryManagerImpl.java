@@ -9,6 +9,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,28 +36,30 @@ public class SplitDiscoveryManagerImpl implements ISplitDiscoveryManager {
 			throws Exception {
 		Set<DiscoverDeviceRequest> ranges = discoverIPRangeDeviceRequests.getDiscoverIpRangeDeviceRequests();
 		List<DiscoverdDeviceResponse> responseList = initializeResponseList();
-
-		if (ranges.size() >= 1) {
-			ExecutorService executorService = Executors.newFixedThreadPool(ranges.size());
-			Set<Callable<List<DiscoverdDeviceResponse>>> callables = new HashSet<Callable<List<DiscoverdDeviceResponse>>>();
-			for (DiscoverDeviceRequest discoverDeviceRequest : ranges) {
-				DiscoverIPRangeDeviceRequests newDiscoverIPRangeDeviceRequests = new DiscoverIPRangeDeviceRequests();
-				newDiscoverIPRangeDeviceRequests.setCredential(discoverIPRangeDeviceRequests.getCredential());
-				Set<DiscoverDeviceRequest> newRanges = new HashSet<DiscoverDeviceRequest>();
-				newRanges.add(discoverDeviceRequest);
-				newDiscoverIPRangeDeviceRequests.setDiscoverIpRangeDeviceRequests(newRanges);
-				callables.add(new Callable<List<DiscoverdDeviceResponse>>() {
-					public List<DiscoverdDeviceResponse> call() throws Exception {
-						return discoveryClient.discover(newDiscoverIPRangeDeviceRequests);
-					}
-				});
-			}
-			List<Future<List<DiscoverdDeviceResponse>>> futures = executorService.invokeAll(callables);
-			for (Future<List<DiscoverdDeviceResponse>> future : futures) {
-				aggregateResponses(responseList, future.get());
-			}
-			executorService.shutdown();
-		} 
+		if (ranges.size() == 1) {
+			discoverIPRangeDeviceRequests = splitIpv4ranges(discoverIPRangeDeviceRequests);
+			ranges = discoverIPRangeDeviceRequests.getDiscoverIpRangeDeviceRequests();
+			logger.trace("Discovery Request : {} "+ ReflectionToStringBuilder.toString(discoverIPRangeDeviceRequests, new CustomRecursiveToStringStyle(99)));
+		}
+		ExecutorService executorService = Executors.newFixedThreadPool(ranges.size());
+		Set<Callable<List<DiscoverdDeviceResponse>>> callables = new HashSet<Callable<List<DiscoverdDeviceResponse>>>();
+		for (DiscoverDeviceRequest discoverDeviceRequest : ranges) {
+			DiscoverIPRangeDeviceRequests newDiscoverIPRangeDeviceRequests = new DiscoverIPRangeDeviceRequests();
+			newDiscoverIPRangeDeviceRequests.setCredential(discoverIPRangeDeviceRequests.getCredential());
+			Set<DiscoverDeviceRequest> newRanges = new HashSet<DiscoverDeviceRequest>();
+			newRanges.add(discoverDeviceRequest);
+			newDiscoverIPRangeDeviceRequests.setDiscoverIpRangeDeviceRequests(newRanges);
+			callables.add(new Callable<List<DiscoverdDeviceResponse>>() {
+				public List<DiscoverdDeviceResponse> call() throws Exception {
+					return discoveryClient.discover(newDiscoverIPRangeDeviceRequests);
+				}
+			});
+		}
+		List<Future<List<DiscoverdDeviceResponse>>> futures = executorService.invokeAll(callables);
+		for (Future<List<DiscoverdDeviceResponse>> future : futures) {
+			aggregateResponses(responseList, future.get());
+		}
+		executorService.shutdown();
 		return responseList;
 	}
 
@@ -98,5 +102,59 @@ public class SplitDiscoveryManagerImpl implements ISplitDiscoveryManager {
 
 		}
 
+	}
+
+	private DiscoverIPRangeDeviceRequests splitIpv4ranges(DiscoverIPRangeDeviceRequests discoverIPRangeDeviceRequests) {
+		DiscoverDeviceRequest discoverDeviceRequest = discoverIPRangeDeviceRequests.getDiscoverIpRangeDeviceRequests()
+				.iterator().next();
+		Set<DiscoverDeviceRequest> newRanges = new HashSet<DiscoverDeviceRequest>();
+		String[] lastIp = StringUtils.split(discoverDeviceRequest.getDeviceEndIp(), ".");
+		String[] firstIp = StringUtils.split(discoverDeviceRequest.getDeviceStartIp(),".");
+		int current = 0;
+		int last = 0;
+		for (int i = 0; i <= 3; i++) {
+			current |= (Integer.parseInt(firstIp[i])) << ((3 - i) * 8);
+			last |= (Integer.parseInt(lastIp[i])) << ((3 - i) * 8);
+		}
+		if ((current & 0xffffff00) == (last & 0xffffff00)) { // this is a valid
+																// range
+			return discoverIPRangeDeviceRequests;
+		}
+		String[] start = new String[4];
+		String[] end = new String[4];
+		DiscoverDeviceRequest firstRange = new DiscoverDeviceRequest(discoverDeviceRequest);
+		current |= 0xFF;
+		for (int i = 0; i <= 3; i++) {
+			end[i] = String.valueOf((current >> ((3 - i) * 8)) & 0xff);
+		}
+		firstRange.setDeviceEndIp(StringUtils.join(end,"."));
+		newRanges.add(firstRange);
+		current += 2; // increment from x.x.x.255 to x.x.x+1.1
+		while ((current & 0xffffff00) != (last & 0xffffff00)) {
+			for (int i = 0; i <= 3; i++) {
+				start[i] = String.valueOf((current >> ((3 - i) * 8)) & 0xff);
+				if (i == 3) {
+					end[i] = String.valueOf(0xFF);
+				} else {
+					end[i] = String.valueOf((current >> ((3 - i) * 8)) & 0xff);
+				}
+			}
+			DiscoverDeviceRequest loopRange = new DiscoverDeviceRequest(discoverDeviceRequest);
+			loopRange.setDeviceStartIp(StringUtils.join(start,"."));
+			loopRange.setDeviceEndIp(StringUtils.join(end,"."));
+			newRanges.add(loopRange);
+			current += 256; // increment from x.x.x.255 to x.x.x+1.1
+		}
+
+		for (int i = 0; i <= 3; i++) {
+			start[i] = String.valueOf((current >> ((3 - i) * 8)) & 0xff);
+			end[i] = String.valueOf((last >> ((3 - i) * 8)) & 0xff);
+		}
+		DiscoverDeviceRequest lastRange = new DiscoverDeviceRequest(discoverDeviceRequest);
+		lastRange.setDeviceStartIp(StringUtils.join(start,"."));
+		lastRange.setDeviceEndIp(StringUtils.join(end,"."));
+		newRanges.add(lastRange);
+		discoverIPRangeDeviceRequests.setDiscoverIpRangeDeviceRequests(newRanges);
+		return discoverIPRangeDeviceRequests;
 	}
 }
