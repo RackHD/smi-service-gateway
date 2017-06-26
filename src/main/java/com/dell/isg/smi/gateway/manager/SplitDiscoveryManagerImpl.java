@@ -10,7 +10,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,9 +36,14 @@ public class SplitDiscoveryManagerImpl implements ISplitDiscoveryManager {
 		Set<DiscoverDeviceRequest> ranges = discoverIPRangeDeviceRequests.getDiscoverIpRangeDeviceRequests();
 		List<DiscoverdDeviceResponse> responseList = initializeResponseList();
 		if (ranges.size() == 1) {
-			discoverIPRangeDeviceRequests = splitIpv4ranges(discoverIPRangeDeviceRequests);
-			ranges = discoverIPRangeDeviceRequests.getDiscoverIpRangeDeviceRequests();
-			logger.trace("Discovery Request : {} "+ ReflectionToStringBuilder.toString(discoverIPRangeDeviceRequests, new CustomRecursiveToStringStyle(99)));
+			try {
+				discoverIPRangeDeviceRequests = splitIpv4ranges(discoverIPRangeDeviceRequests);
+				ranges = discoverIPRangeDeviceRequests.getDiscoverIpRangeDeviceRequests();
+			} catch (Exception e) {
+				logger.error("Error while splitting the ranges hence forwarding the request to service to handle the error.");
+			}
+			//logger.trace("Discovery Request : {} "+ ReflectionToStringBuilder.toString(discoverIPRangeDeviceRequests, new CustomRecursiveToStringStyle(99)));
+			//System.out.println("Discovery Request : {} "+ ReflectionToStringBuilder.toString(discoverIPRangeDeviceRequests, new CustomRecursiveToStringStyle(99)));
 		}
 		ExecutorService executorService = Executors.newFixedThreadPool(ranges.size());
 		Set<Callable<List<DiscoverdDeviceResponse>>> callables = new HashSet<Callable<List<DiscoverdDeviceResponse>>>();
@@ -129,7 +133,7 @@ public class SplitDiscoveryManagerImpl implements ISplitDiscoveryManager {
 		}
 		firstRange.setDeviceEndIp(StringUtils.join(end,"."));
 		newRanges.add(firstRange);
-		current += 2; // increment from x.x.x.255 to x.x.x+1.1
+		current += 1; // increment from x.x.x.255 to x.x.x.1
 		while ((current & 0xffffff00) != (last & 0xffffff00)) {
 			for (int i = 0; i <= 3; i++) {
 				start[i] = String.valueOf((current >> ((3 - i) * 8)) & 0xff);
@@ -143,7 +147,7 @@ public class SplitDiscoveryManagerImpl implements ISplitDiscoveryManager {
 			loopRange.setDeviceStartIp(StringUtils.join(start,"."));
 			loopRange.setDeviceEndIp(StringUtils.join(end,"."));
 			newRanges.add(loopRange);
-			current += 256; // increment from x.x.x.255 to x.x.x+1.1
+			current += 256; // increment from x.x.x.255 to x.x.x.1
 		}
 
 		for (int i = 0; i <= 3; i++) {
