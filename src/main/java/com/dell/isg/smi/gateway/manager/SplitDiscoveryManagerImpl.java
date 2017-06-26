@@ -112,28 +112,35 @@ public class SplitDiscoveryManagerImpl implements ISplitDiscoveryManager {
 		DiscoverDeviceRequest discoverDeviceRequest = discoverIPRangeDeviceRequests.getDiscoverIpRangeDeviceRequests()
 				.iterator().next();
 		Set<DiscoverDeviceRequest> newRanges = new HashSet<DiscoverDeviceRequest>();
+		//Splitting IP string "x.x.x.x" into array using "." has delimiter
 		String[] lastIp = StringUtils.split(discoverDeviceRequest.getDeviceEndIp(), ".");
 		String[] firstIp = StringUtils.split(discoverDeviceRequest.getDeviceStartIp(),".");
 		int current = 0;
 		int last = 0;
+		//Converting IP's to 32 bit values
 		for (int i = 0; i <= 3; i++) {
 			current |= (Integer.parseInt(firstIp[i])) << ((3 - i) * 8);
 			last |= (Integer.parseInt(lastIp[i])) << ((3 - i) * 8);
 		}
-		if ((current & 0xffffff00) == (last & 0xffffff00)) { // this is a valid
-																// range
+		//To check for a valid range :- x.x.x.0 to x.x.x.255
+		if ((current & 0xffffff00) == (last & 0xffffff00)) { 
 			return discoverIPRangeDeviceRequests;
 		}
+		
 		String[] start = new String[4];
 		String[] end = new String[4];
+		// Save the initial range
 		DiscoverDeviceRequest firstRange = new DiscoverDeviceRequest(discoverDeviceRequest);
-		current |= 0xFF;
+		//Set end of the first range to x.x.x.255
+		current |= 0xFF; 
 		for (int i = 0; i <= 3; i++) {
 			end[i] = String.valueOf((current >> ((3 - i) * 8)) & 0xff);
 		}
 		firstRange.setDeviceEndIp(StringUtils.join(end,"."));
 		newRanges.add(firstRange);
-		current += 1; // increment from x.x.x.255 to x.x.x.1
+		
+		current += 1; // increment from x.x.x.255 to x.x.x+1.0
+		//Create ranges until current = last 
 		while ((current & 0xffffff00) != (last & 0xffffff00)) {
 			for (int i = 0; i <= 3; i++) {
 				start[i] = String.valueOf((current >> ((3 - i) * 8)) & 0xff);
@@ -150,6 +157,7 @@ public class SplitDiscoveryManagerImpl implements ISplitDiscoveryManager {
 			current += 256; // increment from x.x.x.255 to x.x.x.1
 		}
 
+		// Save the last range
 		for (int i = 0; i <= 3; i++) {
 			start[i] = String.valueOf((current >> ((3 - i) * 8)) & 0xff);
 			end[i] = String.valueOf((last >> ((3 - i) * 8)) & 0xff);
